@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>La Manzanilla Quantum Roam</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#004D40"/>
+<link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;Quantum Roam&quot;,&quot;short_name&quot;:&quot;Q-Roam&quot;,&quot;display&quot;:&quot;fullscreen&quot;,&quot;background_color&quot;:&quot;#004D40&quot;}"/>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,Arial}
+  html,body,#map{height:100%;background:#004D40;color:#fff}
+  #genie{position:fixed;bottom:0;left:0;width:100%;background:#0008;padding:8px;font-size:14px;z-index:10}
+  #joystick{position:fixed;bottom:80px;right:20px;width:80px;height:80px;border-radius:50%;background:#ffab4088;touch-action:none}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="genie">🧞‍♂️ Loading...</div>
+<div id="joystick"></div>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD8Xv26s2NQz1c3k0xV8fHezR2rFGc2pJg&callback=init"></script>
+<script>
+/* CONFIG */
+const CENTER={lat:19.2831,lng:-104.7836};
+const SHELL_COUNT=7;
+let map,player,sv,geniePrompt="You are a sea-turtle whisperer in La Manzanilla. Reply ≤8 words + emoji. Give next hidden spot.",shells=[],found=0;
+
+/* MAP INIT */
+function init(){
+  map=new google.maps.Map(document.getElementById('map'),{center:CENTER,zoom:18,mapTypeId:'satellite',tilt:45,heading:0,disableDefaultUI:true});
+  player=new google.maps.Marker({position:CENTER,map,icon:{path:google.maps.SymbolPath.CIRCLE,scale:8,fillColor:'#E91E63',strokeColor:'#fff',strokeWeight:2}});
+  sv=new google.maps.StreetViewPanorama(document.createElement('div'));
+  map.addListener('click',e=>{
+    if(e.placeId){e.stop();return}
+    const p=e.latLng;
+    map.setCenter(p);
+    player.setPosition(p);
+    updateGenie(p.lat(),p.lng());
+  });
+  placeShells();
+}
+/* SHELLS */
+function placeShells(){
+  for(let i=0;i<SHELL_COUNT;i++){
+    const angle=Math.random()*2*Math.PI;
+    const dist=120+Math.random()*200;
+    const lat=CENTER.lat+dist/111000*Math.cos(angle);
+    const lng=CENTER.lng+dist/(111000*Math.cos(CENTER.lat*Math.PI/180))*Math.sin(angle);
+    shells.push(new google.maps.Marker({position:{lat,lng},map,icon:'🐚'}));
+  }
+}
+/* GENIE */
+async function updateGenie(lat,lng){
+  const res=await fetch('https://api.openai.com/v1/chat/completions',{
+    method:'POST',
+    headers:{'Authorization':'Bearer sk-YOUR_OPENAI_KEY','Content-Type':'application/json'},
+    body:JSON.stringify({model:'gpt-3.5-turbo',messages:[{role:'user',content:`${geniePrompt} Lat:${lat.toFixed(4)}, Lng:${lng.toFixed(4)}`}]})
+  }).catch(()=>null);
+  const txt=res?await res.json():{};
+  document.getElementById('genie').innerText=txt.choices?.[0]?.message?.content||'🧞‍♂️ No signal';
+}
+/* JOYSTICK */
+const joy=document.getElementById('joystick');
+let base=joy.getBoundingClientRect(),dragging=false;
+joy.addEventListener('pointerdown',e=>{dragging=true});
+window.addEventListener('pointermove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-base.left-40,dy=e.clientY-base.top-40;
+  const ang=Math.atan2(dy,dx),step=0.00005;
+  const lat=player.getPosition().lat()+step*Math.cos(ang);
+  const lng=player.getPosition().lng()+step*Math.sin(ang)/Math.cos(lat*Math.PI/180);
+  player.setPosition({lat,lng});
+  map.setCenter({lat,lng});
+  updateGenie(lat,lng);
+});
+window.addEventListener('pointerup',()=>dragging=false);
+</script>
+</body>
+</html>
